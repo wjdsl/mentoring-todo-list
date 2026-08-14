@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import FastAPI, HTTPException, status
@@ -27,24 +27,43 @@ class TodoResponse(BaseModel):
     todo_list_id: int
     title: str
     description: Optional[str] = None
+    completed: bool
     completed_at: Optional[datetime] = None
 
-# TODO 업데이트 요청
+# TODO 수정 요청
 class TodoUpdate(BaseModel):
     title: Optional[str] = None
     description: Optional[str] = None
 
-# 임시 저장소(DB 대신 사용)
-todo_lists: dict[int, TodoListResponse] = {}
-todos: dict[int, TodoResponse] = {}
+# Todo 리스트 저장 모델
+class TodoList(BaseModel):
+    id: int
+    name: str
+    created_at: datetime
 
-# 자동 증가 id
-next_todo_list_id = 1
-next_todo_id = 1
+# Todo 저장 모델
+class Todo(BaseModel):
+    id: int
+    todo_list_id: int
+    title: str
+    description: Optional[str] = None
+    completed: bool
+    completed_at: Optional[datetime] = None
 
-@app.get("/")
-def root():
-    return {"message": "Hello Todo API"}
+# Todo 리스트 저장소 관리 클래스
+class TodoListRepository:
+    def __init__(self):
+        self.todo_lists: dict[int, TodoList] = {}
+        self.next_todo_list_id = 1
+
+# Todo 저장소 관리 클래스
+class TodoRepository:
+    def __init__(self):
+        self.todos: dict[int, Todo] = {}
+        self.next_todo_id = 1
+
+todo_list_repository = TodoListRepository()
+todo_repository = TodoRepository()
 
 @app.post(
     "/todo-lists",
@@ -52,16 +71,17 @@ def root():
     status_code=status.HTTP_201_CREATED,
 )
 def create_todo_list(request: TodoListCreate):
-    global next_todo_list_id
     
-    todo_list = TodoListResponse(
-        id=next_todo_list_id,
+    todo_list = TodoList(
+        id=todo_list_repository.next_todo_list_id,
         name=request.name,
-        created_at=datetime.now(),
+        created_at=datetime.now(timezone.utc),
     )
 
-    todo_lists[next_todo_list_id] = todo_list
-    next_todo_list_id += 1
+    todo_list_repository.todo_lists[
+        todo_list_repository.next_todo_list_id
+    ] = todo_list
+    todo_list_repository.next_todo_list_id += 1
 
     return todo_list
 
@@ -71,37 +91,37 @@ def create_todo_list(request: TodoListCreate):
     status_code=status.HTTP_201_CREATED,
 )
 def create_todo(list_id: int, request: TodoCreate):
-    global next_todo_id
 
-    if list_id not in todo_lists:
+    if list_id not in todo_list_repository.todo_lists:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
+            status_code=status.HTTP_400_BAD_REQUEST,
             detail="Todo list not found",
         )
     
-    todo = TodoResponse(
-        id=next_todo_id,
+    todo = Todo(
+        id=todo_repository.next_todo_id,
         todo_list_id=list_id,
         title=request.title,
         description=request.description,
+        completed=False,
         completed_at=None,
     )
 
-    todos[next_todo_id] = todo
-    next_todo_id += 1
+    todo_repository.todos[todo_repository.next_todo_id] = todo
+    todo_repository.next_todo_id += 1
 
     return todo
 
 @app.patch("/todos/{todo_id}", response_model=TodoResponse)
 def update_todo(todo_id: int, request: TodoUpdate):
 
-    if todo_id not in todos:
+    if todo_id not in todo_repository.todos:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Todo not found",
         )
     
-    todo = todos[todo_id]
+    todo = todo_repository.todos[todo_id]
 
     if request.title is not None:
         todo.title = request.title
@@ -109,47 +129,47 @@ def update_todo(todo_id: int, request: TodoUpdate):
     if request.description is not None:
         todo.description = request.description
 
-    todos[todo_id] = todo
-
     return todo
 
 @app.post("/todos/{todo_id}/complete", response_model=TodoResponse)
 def complete_todo(todo_id: int):
-    if todo_id not in todos:
+    if todo_id not in todo_repository.todos:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Todo not found",
         )
     
-    todo = todos[todo_id]
-    todo.completed_at = datetime.now()
-    
-    todos[todo_id] = todo
+    todo = todo_repository.todos[todo_id]
+    todo.completed = True
+    todo.completed_at = datetime.now(timezone.utc)
 
     return todo
 
 @app.post("/todos/{todo_id}/uncomplete", response_model=TodoResponse)
 def uncomplete_todo(todo_id: int):
-    if todo_id not in todos:
+    if todo_id not in todo_repository.todos:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Todo not found",
         )
     
-    todo = todos[todo_id]
+    todo = todo_repository.todos[todo_id]
+    todo.completed = False
     todo.completed_at = None
     
     return todo
 
 @app.delete(
     "/todos/{todo_id}",
-    status_code=status.HTTP_204_NO_CONTENT,
+    status_code=status.HTTP_200_OK,
 )
 def delete_todo(todo_id: int):
-    if todo_id not in todos:
+    if todo_id not in todo_repository.todos:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Todo not found",
         )
     
-    del todos[todo_id]
+    del todo_repository.todos[todo_id]
+
+    return {"message": "Todo deleted successfully"}
