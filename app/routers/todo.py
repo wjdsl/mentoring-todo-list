@@ -2,8 +2,12 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException, status
 
-from app.models.todo import Todo, TodoCreate, TodoResponse, TodoUpdate
-from app.repositories import todo_list_repository, todo_repository
+from app.models.todo import TodoCreate, TodoResponse, TodoUpdate
+from app.repositories import (
+    todo_list_repository,
+    todo_repository,
+    todo_tag_repository,
+)
 
 
 router = APIRouter()
@@ -21,19 +25,11 @@ def create_todo(list_id: int, request: TodoCreate):
             detail="Todo list not found",
         )
 
-    todo = Todo(
-        id=todo_repository.next_todo_id,
+    return todo_repository.create(
         todo_list_id=list_id,
         title=request.title,
         description=request.description,
-        completed=False,
-        completed_at=None,
     )
-
-    todo_repository.todos[todo_repository.next_todo_id] = todo
-    todo_repository.next_todo_id += 1
-
-    return todo
 
 
 @router.patch("/todos/{todo_id}", response_model=TodoResponse)
@@ -97,5 +93,6 @@ def delete_todo(todo_id: int):
         )
 
     del todo_repository.todos[todo_id]
+    todo_tag_repository.remove_by_todo_id(todo_id)
 
     return {"message": "Todo deleted successfully"}
