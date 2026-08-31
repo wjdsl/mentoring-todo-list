@@ -21,3 +21,10 @@ class CommentRepository:
         self.next_comment_id += 1
 
         return comment
+
+    def find_by_todo_id(self, todo_id: int) -> list[Comment]:
+        return [
+            comment
+            for comment in self.comments.values()
+            if comment.todo_id == todo_id
+        ]

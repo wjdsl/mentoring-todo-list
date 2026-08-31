@@ -4,6 +4,7 @@ from fastapi import APIRouter, HTTPException, status
 
 from app.models.todo import TodoCreate, TodoResponse, TodoUpdate
 from app.repositories import (
+    tag_repository,
     todo_list_repository,
     todo_repository,
     todo_tag_repository,
@@ -11,6 +12,24 @@ from app.repositories import (
 
 
 router = APIRouter()
+
+
+@router.get("/todos", response_model=list[TodoResponse])
+def get_todos(tag: str | None = None):
+    if tag is None:
+        return list(todo_repository.todos.values())
+
+    found_tag = tag_repository.find_by_name(tag)
+
+    if found_tag is None:
+        return []
+
+    todo_ids = todo_tag_repository.get_todo_ids(found_tag.id)
+
+    return [
+        todo_repository.todos[todo_id]
+        for todo_id in sorted(todo_ids)
+    ]
 
 
 @router.post(

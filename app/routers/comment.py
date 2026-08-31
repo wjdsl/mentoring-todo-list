@@ -36,8 +36,4 @@ def get_comments(todo_id: int):
             detail="Todo not found",
         )
 
-    return [
-        comment
-        for comment in comment_repository.comments.values()
-        if comment.todo_id == todo_id
-    ]
+    return comment_repository.find_by_todo_id(todo_id)
